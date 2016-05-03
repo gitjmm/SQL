@@ -1,0 +1,129 @@
+-- Ejercicios
+-- Estos ejercicios utilizan el esquema HR
+-- Ejecutar en sqlplus el archivo hr_main
+
+
+-- Crear un sinónimo para la tabla departaments
+create synonym dept_syn for departments
+select * from depts
+
+-- Seleccionar todas las tablas de usuario
+select * from user_tables
+
+-- Seleccionar todas las tablas cuyo propietario no sea hr
+select * from all_tables
+where owner <> 'HR'
+
+
+-- Crear la tabla midept con las columnas id numérica y name varchar2
+-- Insertar mediante select los campos id departamento y nombre departamento
+-- Eliminar la tabla y comprobar que está en la papelera
+-- Eliminar definitivamente
+
+create table midept
+(
+id number(7),
+name varchar2(25)
+)
+
+
+insert into midept
+select d.department_id,d.department_name
+from depts d 
+
+drop table midept
+
+select * from recyclebin r where r.original_name = 'MIDEPT'
+
+drop table midept purge;
+
+
+-- Tablas externas
+
+--Crear un directorio externo a una carpeta
+CREATE DIRECTORY emp_dir AS 'c:\emp'
+
+-- Crear la tabla externa emp_data con 3 campos: first_name,last_name y email
+-- Uitlizar el directorio anterior para almacenar la tabla externa 
+-- Cargar los datos desde el archivo emp.txt que se encuentra en c:\emp. Los datos están separados por ;
+
+CREATE TABLE emp_data
+(first_name VARCHAR2(20)
+,last_name VARCHAR2(20)
+, email VARCHAR2(30)
+)
+ORGANIZATION EXTERNAL
+(
+TYPE oracle_loader
+DEFAULT DIRECTORY emp_dir
+ACCESS PARAMETERS
+(
+RECORDS DELIMITED BY NEWLINE CHARACTERSET US7ASCII
+NOBADFILE
+NOLOGFILE
+FIELDS TERMINATED BY ';' OPTIONALLY ENCLOSED BY '"'  LRTRIM
+)
+LOCATION ('emp.txt') ) ;
+
+-- Crear tabla emp_hist con algunos datos (aquellos cuyo email esté entre A y D) de emp_data. 
+-- Usar merge para insertar o actualizar los datos en dicha tabla desde emp_data
+create table emp_hist as
+select * from emp_data where email > 'A' and email < 'D'
+
+--Uso de merge. 
+-- Si existe el empleado (apellidos) se actualiza emp_hist, sino, se inserta un registro desde emp_data 
+
+merge into emp_hist f using emp_data h
+on (f.first_name = h.first_name and f.last_name = h.last_name)
+when matched then
+    update set f.email = h.email
+when not matched then
+  insert (f.first_name,f.last_name,f.email)
+  values (h.first_name,h.last_name,h.email);
+
+
+
+-- Mediante rollup, sumar los salarios, mostrar los campos manager_id y job_id y realizar una agrupación por estos últimos
+-- para aquellos manager inferriores a 130
+select manager_id, job_id, sum(salary),grouping (manager_id),grouping (job_id)
+from employees
+where manager_id < 130
+group by rollup(manager_id,job_id)
+
+-- Mediante cube, sumar los salarios, mostrar los campos manager_id y job_id y realizar una agrupación por estos últimos
+-- para aquellos manager inferriores a 130
+select manager_id, job_id, sum(salary),grouping (manager_id),grouping (job_id)
+from employees
+where manager_id < 130
+group by cube(manager_id,job_id)
+
+
+
+
+/*
+Mediante la cláusula WITH, escriba una consulta para
+mostrar el nombre de departamento y los salarios
+totales de los departamentos cuyo salario total sea
+superior al salario medio de todos los departamentos.
+*/
+
+WITH
+dept_costs AS (
+          SELECT d.department_name, SUM(e.salary) AS dept_total
+          FROM employees e, departments d
+          WHERE e.department_id = d.department_id
+          GROUP BY d.department_name),
+avg_cost AS (
+          SELECT SUM(dept_total)/COUNT(*) AS dept_avg
+          FROM dept_costs)
+SELECT *
+FROM dept_costs
+WHERE dept_total >
+                  (SELECT dept_avg
+                  FROM avg_cost)
+ORDER BY department_name;
+
+
+
+
+
